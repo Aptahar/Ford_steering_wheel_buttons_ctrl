@@ -38,7 +38,9 @@
 // 1.15 Возвернуты кнопки управления звонками
 //      Возвернута кнопка Voice Control
 //      Добавлена функция выключения ESP
-#define VERSION 1.15
+// 1.16 убрана функция выключения ESP
+//      Добавлено вкл обогрева при старте по температуре
+#define VERSION 1.16
 
 /*
   =============================================================================================================
@@ -195,6 +197,9 @@ void outs_reset()
 //=========================================================================================================================
 void setup()
 {
+  double temp;
+  unsigned int wADC;
+
   Serial.begin(9600);
 
   Serial.println("FF3 steering wheel buttons controller with Pioneer AK EDITION");
@@ -230,6 +235,35 @@ void setup()
 
   pinMode(marshPin, INPUT);
   pinMode(audioPin, INPUT);
+
+  // The internal temperature has to be used
+  // with the internal reference of 1.1V.
+  // Channel 8 can not be selected with
+  // the analogRead function yet.
+
+  // Set the internal reference and mux.
+  ADMUX = (_BV(REFS1) | _BV(REFS0) | _BV(MUX3));
+  ADCSRA |= _BV(ADEN);  // enable the ADC
+
+  delay(20);            // wait for voltages to become stable.
+
+  ADCSRA |= _BV(ADSC);  // Start the ADC
+
+  // Detect end-of-conversion
+  while (bit_is_set(ADCSRA,ADSC));
+
+// Reading register "ADCW" takes care of how to read ADCL and ADCH.
+  wADC = ADCW;
+
+  // The offset of 324.31 could be wrong. It is just an indication.
+  temp = (wADC - 324.31) / 1.22;
+  Serial.println(temp);
+  Serial.println(ADCW);
+
+  if(temp < 4.0)
+  {// холодно, включаем обогрев руля
+    heating_change_state(true);
+  }
 }
 
 
@@ -482,7 +516,7 @@ void doubleButton(void)
     switch (prevButton)
     {
       // --------- MK ---------
-      case PressOk:
+      /*case PressOk:
         // вниз до меню
         digitalWrite(out_mk_up, HIGH);
         delay(100);
@@ -533,7 +567,7 @@ void doubleButton(void)
         digitalWrite(out_mk_dn, LOW);
         delay(100);
         Serial.println("ESP on\off");
-      break;
+      break;*/
       
       // --------- CRUISE ---------
       case PressCruiseOn:
@@ -628,7 +662,7 @@ void loop() {
       HeatTimer = false;
       //analogWrite(out_heating, HEAT_HALF_POWER);      // по окончанию времени таймера обогрев на половину
       digitalWrite(out_heating, LOW);
-      Serial.println("Вкл обогрев руля на ПОЛОВИНУ");
+      Serial.println("Вкл обогрев руля на ПОЛОВИНУ мощности");
     }
   }
 
