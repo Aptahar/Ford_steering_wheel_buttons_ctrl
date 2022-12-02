@@ -159,10 +159,13 @@ int csPin = 10;      // CS на цифровом потенциометре
 #define HEAT_ON     11
 #define HEAT_OFF    10
 
-byte HeatState = HEAT_OFF;   // значение состояния обогрева
-boolean HeatTimer = false;   // флаг таймера включения обог��ева
-unsigned long timeStamp = 0; // метка времени включения обогрева
-unsigned long bTime = 0;     // метка времени длительности нажания кнопки
+#define TIMER_START_HEAT_BY_TEMP 20000 // 20 секунд
+
+byte HeatState = HEAT_OFF;      // значение состояния обогрева
+boolean HeatTimer = false;      // флаг таймера включения обогрева на половину мощности
+boolean HeatStartTimer = false; // флаг таймера включения обогрева по температуре
+unsigned long timeStamp = 0;      // метка времени включения обогрева
+unsigned long bTime = 0;          // метка времени длительности нажания кнопки
 int currButton;
 
 unsigned long pwm_timer = 0;
@@ -170,6 +173,7 @@ unsigned long pwm_timer = 0;
 bool CruiseIsOn = false;
 
 void (* reboot)(void) = 0;  // вызов для программного ресета
+void heating_change_state(boolean on);
 
 byte test_res = 28;
 //=========================================================================================================================
@@ -202,12 +206,12 @@ void setup()
 
   Serial.begin(9600);
 
-  Serial.println("FF3 steering wheel buttons controller with Pioneer AK EDITION");
+  Serial.println("FF3 steering wheel buttons controller with Pioneer");
   Serial.print("Version ");
   Serial.println(VERSION);
 
   HeatState = HEAT_OFF;   // значение состояния обогрева
-  HeatTimer = false;   // флаг таймера включения обогрева
+  HeatTimer = false;      // флаг таймера включения обогрева
 
   outs_reset();
   digitalWrite(out_heating, LOW);
@@ -256,13 +260,15 @@ void setup()
   wADC = ADCW;
 
   // The offset of 324.31 could be wrong. It is just an indication.
-  temp = (wADC - 324.31) / 1.22;
+  // offset = wADC - temp * 1.2
+#define ADC_TEMP_OFFSET 324.31
+  temp = (wADC - ADC_TEMP_OFFSET) / 1.22;
   Serial.println(temp);
-  Serial.println(ADCW);
+  Serial.println(wADC);
 
   if(temp < 4.0)
-  {// холодно, включаем обогрев руля
-    heating_change_state(true);
+  {// холодно, заводим таймер на включение обогрев руля
+    HeatStartTimer = true;
   }
 }
 
@@ -669,5 +675,11 @@ void loop() {
   if((HeatState == HEAT_ON) && (HeatTimer == false))
   {
     program_PWM();
+  }
+
+  if(HeatStartTimer && (TIMER_START_HEAT_BY_TEMP == millis()))
+  {// холодно, включаем обогрев руля после задержки
+    HeatStartTimer = false;
+    heating_change_state(true);
   }
 }
